@@ -7,14 +7,20 @@
 
 #include "I2C.h"
 
+
+
 //Initialize I2C for 100kHz
 //USCI_B0
 //SDA = 3.1
 //SCL = 3.2
-void i2c_init(void)
+void i2c_masterInit(void)
 {
+
+
 	//Master, I2C, Synchronous
 	UCB0CTL1 |= UCSWRST;
+
+
 
 	UCB0CTL0 |= UCMST | UCMODE1 | UCMODE0 | UCSYNC;
 
@@ -32,14 +38,24 @@ void i2c_init(void)
 
 }
 
-//TODO: Change to interrupt system
-void i2c_sendData(uint8_t address, uint8_t *data, uint8_t numBytes)
+//Send data over I2C. Busy flag is polled per cycle until data is sent.
+//Returns 1 if something went wrong.
+uint8_t i2c_sendPolledData(uint8_t address, uint8_t *data, uint8_t numBytes)
 {
 	int i = 0;
+	int busyCount = 0;
 
 	while(1)
 	{
 		if(!(UCB0STAT & UCBBUSY)) break;
+		else if(busyCount > 20)
+		{
+			return I2C_BUSY;
+		}
+		timer_waitMicro(20);
+		busyCount++;
+
+
 	}
 
 	//Set device Address
@@ -55,10 +71,27 @@ void i2c_sendData(uint8_t address, uint8_t *data, uint8_t numBytes)
 		//Put data in TXBUF
 		//Busy and wait
 		while(!(IFG2 | UCB0TXIFG));
-		UCB0TXBUF = *(data + i);
+
+		if(UCB0STAT & UCNACKIFG)
+			{
+			return I2C_NO_ACK;
+
+			}
+		else UCB0TXBUF = *(data); //Send data if ACK
+
 	}
 
 	UCB0CTL1 |= UCTXSTP; // Stop Condition
 
+	if(UCB0STAT & UCNACKIFG) return I2C_NO_ACK; //Check for I2C ERROR
+	else return I2C_PASS;
 
 }
+
+
+void i2c_rxNack(uint8_t* i2c_status)
+{
+	UCB0STAT &= ~UCNACKIFG;
+	*i2c_status = 0;
+}
+

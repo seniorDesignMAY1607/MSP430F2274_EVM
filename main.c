@@ -19,15 +19,15 @@ powerState_t power_state = OFF;
 int main(void) {
 
 	WDTCTL = WDTPW | WDTHOLD;	// Stop watchdog timer
-	
+	uint8_t i2c_status = I2C_PASS;
 
     util_initClock();	//Initialize sys
     timer_initA0(); //Timer for waitMilli / Micro
     dpp_init();
     button_initPorts();
-    i2c_init();
+    i2c_masterInit();
 
-    uint8_t SplashData[2] = {0x0D, 0x01}; //Splash screen data
+    uint8_t SplashData[2] = {0x0D, 0x03}; //Splash screen data
     uint8_t sourceSelect[2] = {0x05, 0x02};
     uint8_t splashScreenExecute[1] = {0x35};
 
@@ -47,11 +47,17 @@ int main(void) {
     	if(power_state == ON)
     	{
 
-			i2c_sendData(DPP_WRITE_ADDR, SplashData, 2); //Write Splash Screen
+			if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_WRITE_ADDR, SplashData, 2); //Write Splash Screen
 			timer_waitMilli(1);
-			i2c_sendData(DPP_WRITE_ADDR, sourceSelect, 2);
+			if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_WRITE_ADDR, sourceSelect, 2);
 			timer_waitMilli(1);
-			i2c_sendData(DPP_WRITE_ADDR, splashScreenExecute, 1);
+			if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_WRITE_ADDR, splashScreenExecute, 1);
+
+			if(i2c_status == I2C_NO_ACK)
+				{
+				i2c_rxNack(&i2c_status);
+				P3OUT ^= BIT5;
+				}
 
     	}
 
