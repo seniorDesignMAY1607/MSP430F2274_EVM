@@ -18,8 +18,10 @@ powerState_t power_state = OFF;
 
 int main(void) {
 
-	WDTCTL = WDTPW | WDTHOLD;	// Stop watchdog timer
+	WDTCTL = WDTPW | WDTHOLD;
+	// Stop watchdog timer
 	uint8_t i2c_status = I2C_PASS;
+	int toggle = 0;
 
     util_initClock();	//Initialize sys
     timer_initA0(); //Timer for waitMilli / Micro
@@ -27,9 +29,7 @@ int main(void) {
     button_initPorts();
     i2c_masterInit();
 
-    uint8_t SplashData[2] = {0x0D, 0x03}; //Splash screen data
-    uint8_t sourceSelect[2] = {0x05, 0x02};
-    uint8_t splashScreenExecute[1] = {0x35};
+
 
     P3DIR |= BIT4 | BIT5 | BIT6;
     P3OUT |= BIT4;
@@ -44,14 +44,43 @@ int main(void) {
 		P3OUT ^= BIT6;
 		timer_waitMilli(500);
 
-    	if(power_state == ON)
+		switch(power_state)
+		{
+		case TURN_ON:
+			dpp_turnOn();
+			break;
+		case ON:
+			dpp_sourceSelect(1);
+			timer_waitMilli(750);
+			dpp_dispCurtain(1, toggle );
+			toggle ^= 1;
+			break;
+
+		case TURN_OFF:
+			dpp_turnOff();
+			break;
+
+		}
+
+
+
+		/*
+
+		if(power_state == ON)
     	{
 
-			if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_WRITE_ADDR, SplashData, 2); //Write Splash Screen
-			timer_waitMilli(1);
-			if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_WRITE_ADDR, sourceSelect, 2);
-			timer_waitMilli(1);
-			if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_WRITE_ADDR, splashScreenExecute, 1);
+    		dpp_sourceSelect(1);
+    		timer_waitMilli(750);
+			//if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_ADDR, SplashData, 2); //Write Splash Screen
+			//timer_waitMicro(100);
+			//if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_ADDR, sourceSelect, 2);
+			//timer_waitMicro(100);
+			//if(i2c_status != I2C_NO_ACK) i2c_status = i2c_sendPolledData(DPP_ADDR, splashScreenExecute, 1);
+			//timer_waitMicro(100);
+
+
+    		//dpp_changeSplashScreen(1);
+    		//dpp_sourceSelect(2);
 
 			if(i2c_status == I2C_NO_ACK)
 				{
@@ -59,7 +88,7 @@ int main(void) {
 				P3OUT ^= BIT5;
 				}
 
-    	}
+    	}*/
 
 
     	//timer_waitMicro(100);
