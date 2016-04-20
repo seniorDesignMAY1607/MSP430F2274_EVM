@@ -27,7 +27,6 @@ int main(void) {
     timer_initA0(); //Timer for waitMilli / Micro
     dpp_init();
     button_initPorts();
-    i2c_masterInit();
 
 
 
@@ -50,7 +49,7 @@ int main(void) {
 			dpp_turnOn();
 			break;
 		case ON:
-			dpp_sourceSelect(1);
+			//dpp_sourceSelect(1);
 			timer_waitMilli(750);
 			dpp_dispCurtain(1, toggle );
 			toggle ^= 1;

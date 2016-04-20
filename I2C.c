@@ -35,20 +35,55 @@ i2c_status_t __i2c_currentStatus = NOT_BUSY;
 #pragma vector = USCIAB0TX_VECTOR
 __interrupt void USCIAB0TX_ISR(void)
 {
+	if(__i2c_currentStatus == NOT_BUSY) {
+		IFG2 &= ~UCB0TXIFG;
+		return;
+	}
+
 	i2c_frame_t *curFrame = &__i2c_frameBuffer[__i2c_bufferStart];
 
 	//TX Buffer Empty -- Need to check for Mode?
-	if(IFG2 | UCB0TXIFG)
+	if(IFG2 & UCB0TXIFG)
 	{
-		P3OUT ^= BIT5;
-		UCB0TXBUF = curFrame->data[curFrame->curPos++];
-
-		//Check if all data is sent
-		if(curFrame->curPos >= curFrame->length)
+		if(UCB0CTL1 & UCSTTIFG) //Send first data checks for STT flag
 		{
-			*(curFrame->flags) |= I2C_SENT;
-			UCB0CTL1 |= UCTXSTP; // Send Nack followed by Stop Condition
+			UCB0TXBUF = curFrame->subAddr;
+		}else
+		{
+			P3OUT ^= BIT5;
+			UCB0TXBUF = curFrame->data[curFrame->curPos++];
+
+			//Check for rx enough data.... Need to verify
+			if(curFrame->curPos >= curFrame->length)
+			{
+				*(curFrame->flags) |= I2C_SENT; //Sent flag
+				*(curFrame->flags) &= ~I2C_IN_BUFFER;
+				__i2c_bufferStart = (__i2c_bufferStart + 1) & BUFFER_MASK;//Increment to next data
+
+				//Check for more data in buffer
+				if(__i2c_bufferStart == __i2c_bufferEnd)
+				{
+					__i2c_currentStatus = NOT_BUSY;
+					UCB0CTL1 |= UCTXSTP; // Send Nack followed by Stop Condition
+				}else
+				{
+					UCB0I2CSA = curFrame->addr;
+
+					//Set TX / !RX
+					if( ( *(curFrame->flags) & I2C_TX_MODE) )
+					{
+						UCB0CTL1 |= UCTR; //TX Mode
+					}else
+					{
+						UCB0CTL1 &= ~UCTR; 	//RX Mode
+					}
+
+					UCB0CTL1 |= UCSTTIFG; //Repeated start -- Retransmit slave address
+
+				}
+			}
 		}
+
 	}
 	else //RX Buffer Full
 	{
@@ -93,7 +128,7 @@ __interrupt void USCIAB0TX_ISR(void)
 #pragma vector = USCIAB0RX_VECTOR
 __interrupt void USCIAB0RX_ISR(void)
 {
-	//Check for Start Condition
+	//Check for Start Condition -- Only in Slave Mode
 	if(UCB0STAT & UCSTTIFG)
 	{
 		//Put first data (Sub Address for this application in buffer after slave ACK
@@ -140,16 +175,16 @@ void i2c_masterInit(void)
 	UCB0CTL1 |= UCSSEL1 | UCTR;
 	UCB0BR0 = 10; //Divide by 10 prescalar -- 1MHZ SMCLK
 
-	//Interrupt Enable
-	UCB0I2CIE |=  UCSTTIE | UCNACKIE;	//Start Condition and Nack IE
-	//IE2 |= UCB0TXIE | UCB0RXIE;			//TX / RX Enable Do not set until ready
-
 	//config ports
 	P3SEL |= BIT1 | BIT2; //See device specific datasheet for selecting alternate pin functions
 
 	//Undo Reset
 	UCB0CTL1 &= ~UCSWRST;
 
+	//Interrupt Enable
+	UCB0I2CIE |=  UCNACKIE;	//Start Condition and Nack IE
+	IE2 |= UCB0TXIE | UCB0RXIE;			//TX ISR -- TX/RX Buffer
+										//RX ISR -- I2C Status information
 	//TODO: Enable Interupts
 
 }
@@ -247,7 +282,7 @@ int8_t i2c_addToQueue(uint8_t addr, uint8_t subAddr, uint8_t data[], uint8_t len
 
 
 	//Start I2C if necessary
-	void i2c_startTransacting(void);
+	i2c_startTransacting();
 
 
 	return bufferStack + 1; //Return buffer length
@@ -296,7 +331,8 @@ int8_t i2c_readData(uint8_t addr, uint8_t subAddr, uint8_t data[], uint8_t lengt
 void i2c_startTransacting(void)
 {
 	//Check if status is not busy and i2c module is not in the middle of anything
-	if((__i2c_currentStatus == NOT_BUSY) && !(UCB0STAT & UCBBUSY))
+	//if(!(UCB0STAT & UCBBUSY))
+	if(__i2c_currentStatus == NOT_BUSY)
 	{
 		__i2c_currentStatus = IS_BUSY;
 

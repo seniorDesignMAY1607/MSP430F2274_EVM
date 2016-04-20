@@ -56,6 +56,7 @@ int8_t i2c_addToQueue(uint8_t addr, uint8_t subAddr, uint8_t data[], uint8_t len
 ///int8_t i2c_readData(uint8_t addr, uint8_t subAddr, uint8_t data[], uint8_t length, uint8_t *flags);
 
 
+void i2c_startTransacting(void);
 
 //Clear nack flag and reset i2c
 //TODO: Change to interrupt!!
